@@ -122,7 +122,7 @@ h3{font-size:1.2rem;margin-top:1.6em}
     </div>
     <main class="panel" id="panel" aria-live="polite"></main>
   </div>
-  <p class="source">Dimensions adapted from Marilyn Loden and Judy Rosener, <i>Workforce America! Managing Employee Diversity as a Vital Resource</i> (1991).</p>
+  <p class="source">Dimensions adapted from Marilyn Loden and Judy Rosener, <i>Workforce America! Managing Employee Diversity as a Vital Resource</i> (1991). Language added as an additional dimension.</p>
 </div>
 
 <script>
@@ -169,6 +169,10 @@ const DIMS = [
   {id:"geography", name:"Geographic location", ring:1, color:"#3F7F4F", multi:true,
    q:"What kinds of places have shaped you?",
    opts:["Rural area","Small town","Suburb","City","Moved often","Grew up in another country","Live in another country now","Tribal or reservation land",SELF,PNTS]},
+  {id:"language", name:"Language", ring:1, color:"#3FB5D9", multi:true,
+   q:"What is your relationship with language?",
+   extra:"Which languages do you speak, sign, or understand?",
+   opts:["Speak one language","Bilingual","Multilingual (three or more)","The main language where I live is my first language","The main language where I live is not my first language","Use a sign language","Speak a regional dialect or strong accent","Switch how I speak between communities","Reconnecting with a heritage language","My family lost a language over generations",SELF,PNTS]},
   {id:"work", name:"Work background", ring:1, color:"#B8453A", multi:true,
    q:"Which fields make up your work background?",
    opts:["Education","Healthcare","Technology","Business or finance","Trades or manufacturing","Service, hospitality or retail","Arts or media","Government or public service","Military","Nonprofit or community work","Agriculture","Science or research","Caregiving or homemaking","Student",SELF,PNTS]}
@@ -180,7 +184,7 @@ const TRAITS = [
   ["Empathetic","#C76D9B"],["Creative","#8A55C2"],["Practical","#5E8C46"],["Spontaneous","#F07A5A"]
 ];
 
-const blank = () => ({choices:[], other:"", inf:null, skipped:false});
+const blank = () => ({choices:[], other:"", extra:"", inf:null, skipped:false});
 const state = { traits: [], answers: Object.fromEntries(DIMS.map(d => [d.id, blank()])) };
 const STEPS = ["intro","personality", ...DIMS.map(d => d.id), "result"];
 let step = 0;
@@ -214,15 +218,36 @@ function shade(hex, dL=0, chromaMul=1, hueShift=0, minC=0){
 const textOn = hex => hexToLab(hex)[0] > 0.68 ? "#1C1F3A" : "#FFFFFF";
 
 // Every answer choice gets its own shade within its dimension's color family.
-// Shades are spread evenly by list position, so no shade is meant to "stand for" a group.
+// Each option gets a color picked to be as different as possible from the others in its
+// dimension (within that dimension's color family). Order follows the list, so no shade is
+// meant to "stand for" a group.
+const _palettes = {};
+function dimPalette(d){
+  if(_palettes[d.id]) return _palettes[d.id];
+  const n = d.opts.filter(o=>o!==PNTS).length;
+  const L0 = hexToLab(d.color)[0];
+  const Lc = Math.min(0.7, Math.max(0.52, L0));
+  const cands = [];
+  for(let h=0;h<11;h++) for(const dl of [-0.2,-0.07,0.07,0.2]){
+    const hex = shade(d.color, Lc+dl-L0, 1.25, (h/10-0.5)*2.1, 0.11);
+    cands.push({hex, lab:hexToLab(hex)});
+  }
+  const dist=(p,q)=>Math.hypot(p[0]-q[0],p[1]-q[1],p[2]-q[2]);
+  const baseLab = hexToLab(d.color);
+  const first = cands.reduce((b,c)=>dist(c.lab,baseLab)<dist(b.lab,baseLab)?c:b);
+  const picked=[first];
+  while(picked.length<n){
+    let best=null,bd=-1;
+    for(const c of cands){ if(picked.includes(c)) continue;
+      const md=Math.min(...picked.map(p=>dist(p.lab,c.lab))); if(md>bd){bd=md;best=c} }
+    picked.push(best);
+  }
+  return (_palettes[d.id]=picked.map(p=>p.hex));
+}
 function optColor(d, opt){
   if(opt===PNTS) return shade(d.color, 0.18, 0.2);
   const list = d.opts.filter(o=>o!==PNTS);
-  const i = list.indexOf(opt), n = list.length;
-  const t = n>1 ? i/(n-1) : 0.5;
-  const hueShift = (t-0.5)*0.95;              // about ±27°
-  const dL = [0,-0.09,0.08][i%3];
-  return shade(d.color, dL, 1.05, hueShift, 0.075);
+  return dimPalette(d)[list.indexOf(opt)];
 }
 
 // ---------- Seeded randomness ----------
@@ -304,7 +329,7 @@ function drawLens(){
     const count = Math.round((span*180/Math.PI) * (1.3 + 2.2*t));
     for(let k=0;k<count;k++){
       const ang = start+gap + rand()*(span-2*gap);
-      const col = shade(cols[k % cols.length], (rand()-.5)*0.08);
+      const col = shade(cols[k % cols.length], (rand()-.5)*0.04);
       const rs = rin + (rout-rin)*0.02*rand();
       const len = (rout-rin) * (0.3 + 0.68*t) * (0.55 + 0.45*rand());
       const re = Math.min(rout-(rout-rin)*0.02, rs+len);
@@ -408,7 +433,7 @@ function renderIntro(){
   panel.innerHTML = `
     <h1 class="title">Who are you?</h1>
     <p>Everyone sees the world through a lens shaped by many parts of who they are: age, race, gender, where they grew up, the work they do, and more.</p>
-    <p class="lead">For each of 14 dimensions, choose the answers that describe you. Every answer has its own color, and together they tint your lens. You can also say how strongly each dimension shapes you, which makes its colors bolder or softer.</p>
+    <p class="lead">For each of 15 dimensions, choose the answers that describe you. Every answer has its own color, and together they tint your lens. You can also say how strongly each dimension shapes you, which makes its colors bolder or softer.</p>
     <p class="lead">Choose "${PNTS}" or skip anything you'd rather not share. Those show up in your lens too, as frosted or open spaces.</p>
     <div class="nav"><button class="btn" id="go">Start building my lens</button></div>
     <p class="note">Nothing you choose is saved or sent anywhere. Your answers disappear when you close this page.</p>`;
@@ -454,6 +479,7 @@ function renderDim(d){
         <label class="q-hint" for="other" style="display:block;margin-top:10px">Describe it in your own words</label>
         <input type="text" id="other" value="${escapeHtml(a.other)}" autocomplete="off">
       </div>
+      ${d.extra?`<label class="q-hint" for="extra" style="display:block;margin-top:14px">${d.extra} (optional)</label><input type="text" id="extra" value="${escapeHtml(a.extra)}" autocomplete="off">`:""}
     </div>
     <div class="q">
       <span class="q-label" id="inf-l">How much does this shape the way you see the world? <span class="q-hint">Optional</span></span>
@@ -479,6 +505,7 @@ function renderDim(d){
     if(o===SELF && a.choices.includes(SELF)) panel.querySelector("#other").focus();
   });
   panel.querySelector("#other").oninput = e=>{a.other=e.target.value};
+  const ex = panel.querySelector("#extra"); if(ex) ex.oninput = e=>{a.extra=e.target.value};
   panel.querySelectorAll("[data-inf]").forEach(b=>b.onclick=()=>{
     const v=+b.dataset.inf; a.inf = a.inf===v ? null : v;
     panel.querySelectorAll("[data-inf]").forEach(x=>x.setAttribute("aria-pressed",+x.dataset.inf===a.inf));
@@ -533,7 +560,7 @@ function renderResult(){
     <h3>Your colors</h3>
     <ul class="threads">${ordered.map(d=>{const a=state.answers[d.id];
       return `<li><strong>${d.name}</strong>${a.inf!==null?`<small>Shapes me: ${SCALE[a.inf].toLowerCase()}</small>`:""}
-        <div class="pills">${a.choices.filter(c=>c!==PNTS).map(c=>{const col=optColor(d,c);return `<span class="pill" style="--c:${col};--tc:${textOn(col)}">${escapeHtml(label(a,c))}</span>`}).join("")}</div></li>`}).join("")}</ul>
+        <div class="pills">${a.choices.filter(c=>c!==PNTS).map(c=>{const col=optColor(d,c);return `<span class="pill" style="--c:${col};--tc:${textOn(col)}">${escapeHtml(label(a,c))}</span>`}).join("")}</div>${a.extra.trim()?`<small>${escapeHtml(a.extra.trim())}</small>`:""}</li>`}).join("")}</ul>
     <h3>Questions to sit with</h3>
     <ol class="prompts">${prompts.map(p=>`<li>${p}</li>`).join("")}</ol>
     <div class="nav">
@@ -552,7 +579,7 @@ function renderResult(){
     if(state.traits.length) lines.push(`Personality: ${state.traits.join(", ")}`);
     lines.push("");
     DIMS.forEach(d=>{const a=state.answers[d.id];
-      lines.push(`${d.name}: ${a.choices.length?a.choices.map(c=>label(a,c)).join(", "):a.skipped?"skipped":"not answered"}${a.inf!==null?` (shapes me: ${SCALE[a.inf].toLowerCase()})`:""}`)});
+      lines.push(`${d.name}: ${a.choices.length?a.choices.map(c=>label(a,c)).join(", "):a.skipped?"skipped":"not answered"}${a.inf!==null?` (shapes me: ${SCALE[a.inf].toLowerCase()})`:""}${a.extra.trim()?` [${a.extra.trim()}]`:""}`)});
     const st=panel.querySelector("#cstatus");
     try{ await navigator.clipboard.writeText(lines.join("\n")); st.textContent="Copied your summary to the clipboard."; }
     catch(e){ st.textContent="Your browser blocked copying. Select the text on this page and copy it instead."; }
